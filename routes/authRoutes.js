@@ -10,16 +10,27 @@ const router = express.Router();
 // =========================
 router.post("/signup", async (req, res) => {
   try {
+    console.log("========== SIGNUP REQUEST ==========");
+    console.log("Request body:", {
+      name: req.body?.name,
+      email: req.body?.email,
+      password: req.body?.password ? "[PROVIDED]" : "[MISSING]",
+    });
+
     const { name, email, password } = req.body;
 
     // Validation
     if (!name || !email || !password) {
+      console.log("Signup validation failed: Missing fields");
+
       return res.status(400).json({
         message: "Name, email and password are required",
       });
     }
 
     if (password.length < 6) {
+      console.log("Signup validation failed: Password too short");
+
       return res.status(400).json({
         message: "Password must be at least 6 characters",
       });
@@ -27,11 +38,15 @@ router.post("/signup", async (req, res) => {
 
     const normalizedEmail = email.toLowerCase().trim();
 
+    console.log("Normalized email:", normalizedEmail);
+
     // Prevent admin email from being registered as employee
     if (
       process.env.ADMIN_EMAIL &&
       normalizedEmail === process.env.ADMIN_EMAIL.toLowerCase().trim()
     ) {
+      console.log("Signup blocked: Admin email used");
+
       return res.status(403).json({
         message: "This email is reserved for admin",
       });
@@ -43,13 +58,21 @@ router.post("/signup", async (req, res) => {
     });
 
     if (existingUser) {
+      console.log("Signup blocked: Email already exists");
+
       return res.status(409).json({
         message: "Email already registered",
       });
     }
 
+    console.log("No existing user found");
+    console.log("Hashing password...");
+
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
+
+    console.log("Password hashed successfully");
+    console.log("Creating employee in MongoDB...");
 
     // Create employee
     const user = await User.create({
@@ -59,7 +82,15 @@ router.post("/signup", async (req, res) => {
       role: "employee",
     });
 
-    res.status(201).json({
+    console.log("======================================");
+    console.log("USER CREATED SUCCESSFULLY");
+    console.log("User ID:", user._id.toString());
+    console.log("User name:", user.name);
+    console.log("User email:", user.email);
+    console.log("User role:", user.role);
+    console.log("======================================");
+
+    return res.status(201).json({
       message: "Account created successfully",
       user: {
         id: user._id,
@@ -69,10 +100,15 @@ router.post("/signup", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Signup error:", error);
+    console.error("========== SIGNUP ERROR ==========");
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+    console.error(error);
+    console.error("===================================");
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error during signup",
+      error: error.message,
     });
   }
 });
@@ -82,10 +118,20 @@ router.post("/signup", async (req, res) => {
 // =========================
 router.post("/login", async (req, res) => {
   try {
+    console.log("========== LOGIN REQUEST ==========");
+
     const { email, password } = req.body;
+
+    console.log("Login email:", email);
+    console.log(
+      "Password provided:",
+      password ? "YES" : "NO"
+    );
 
     // Validation
     if (!email || !password) {
+      console.log("Login validation failed: Missing fields");
+
       return res.status(400).json({
         message: "Email and password are required",
       });
@@ -100,9 +146,13 @@ router.post("/login", async (req, res) => {
       process.env.ADMIN_EMAIL &&
       normalizedEmail === process.env.ADMIN_EMAIL.toLowerCase().trim()
     ) {
+      console.log("Admin login attempt");
+
       if (!process.env.ADMIN_PASSWORD_HASH) {
-        console.error("ADMIN_PASSWORD_HASH is missing in environment");
-        
+        console.error(
+          "ADMIN_PASSWORD_HASH is missing in environment"
+        );
+
         return res.status(500).json({
           message: "Admin authentication is not configured",
         });
@@ -114,10 +164,14 @@ router.post("/login", async (req, res) => {
       );
 
       if (!isAdminPasswordValid) {
+        console.log("Admin password invalid");
+
         return res.status(401).json({
           message: "Invalid email or password",
         });
       }
+
+      console.log("Admin password valid");
 
       // Create admin token
       const token = jwt.sign(
@@ -130,6 +184,8 @@ router.post("/login", async (req, res) => {
           expiresIn: "1d",
         }
       );
+
+      console.log("Admin login successful");
 
       return res.json({
         message: "Admin login successful",
@@ -146,15 +202,21 @@ router.post("/login", async (req, res) => {
     // =====================================
     // EMPLOYEE LOGIN
     // =====================================
+    console.log("Employee login attempt");
+
     const user = await User.findOne({
       email: normalizedEmail,
     });
 
     if (!user) {
+      console.log("Employee not found:", normalizedEmail);
+
       return res.status(401).json({
         message: "Invalid email or password",
       });
     }
+
+    console.log("Employee found:", user._id.toString());
 
     // Compare employee password
     const isPasswordValid = await bcrypt.compare(
@@ -163,10 +225,14 @@ router.post("/login", async (req, res) => {
     );
 
     if (!isPasswordValid) {
+      console.log("Employee password invalid");
+
       return res.status(401).json({
         message: "Invalid email or password",
       });
     }
+
+    console.log("Employee password valid");
 
     // Create employee token
     const token = jwt.sign(
@@ -180,6 +246,9 @@ router.post("/login", async (req, res) => {
       }
     );
 
+    console.log("Employee login successful");
+    console.log("=================================");
+
     return res.json({
       message: "Login successful",
       token,
@@ -191,10 +260,15 @@ router.post("/login", async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Login error:", error);
+    console.error("========== LOGIN ERROR ==========");
+    console.error("Error name:", error.name);
+    console.error("Error message:", error.message);
+    console.error(error);
+    console.error("=================================");
 
     return res.status(500).json({
       message: "Server error during login",
+      error: error.message,
     });
   }
 });

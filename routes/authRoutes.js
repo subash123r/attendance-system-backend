@@ -19,16 +19,27 @@ router.post("/signup", async (req, res) => {
       });
     }
 
-    // Password validation
     if (password.length < 6) {
       return res.status(400).json({
         message: "Password must be at least 6 characters",
       });
     }
 
-    // Check existing user
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // Prevent admin email from being registered as employee
+    if (
+      process.env.ADMIN_EMAIL &&
+      normalizedEmail === process.env.ADMIN_EMAIL.toLowerCase().trim()
+    ) {
+      return res.status(403).json({
+        message: "This email is reserved for admin",
+      });
+    }
+
+    // Check existing employee
     const existingUser = await User.findOne({
-      email: email.toLowerCase(),
+      email: normalizedEmail,
     });
 
     if (existingUser) {
@@ -43,7 +54,7 @@ router.post("/signup", async (req, res) => {
     // Create employee
     const user = await User.create({
       name: name.trim(),
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
       password: hashedPassword,
       role: "employee",
     });
@@ -80,9 +91,63 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Find user
+    const normalizedEmail = email.toLowerCase().trim();
+
+    // =====================================
+    // ADMIN LOGIN
+    // =====================================
+    if (
+      process.env.ADMIN_EMAIL &&
+      normalizedEmail === process.env.ADMIN_EMAIL.toLowerCase().trim()
+    ) {
+      if (!process.env.ADMIN_PASSWORD_HASH) {
+        console.error("ADMIN_PASSWORD_HASH is missing in environment");
+        
+        return res.status(500).json({
+          message: "Admin authentication is not configured",
+        });
+      }
+
+      const isAdminPasswordValid = await bcrypt.compare(
+        password,
+        process.env.ADMIN_PASSWORD_HASH
+      );
+
+      if (!isAdminPasswordValid) {
+        return res.status(401).json({
+          message: "Invalid email or password",
+        });
+      }
+
+      // Create admin token
+      const token = jwt.sign(
+        {
+          userId: "admin",
+          role: "admin",
+        },
+        process.env.JWT_SECRET,
+        {
+          expiresIn: "1d",
+        }
+      );
+
+      return res.json({
+        message: "Admin login successful",
+        token,
+        user: {
+          id: "admin",
+          name: "Admin",
+          email: process.env.ADMIN_EMAIL,
+          role: "admin",
+        },
+      });
+    }
+
+    // =====================================
+    // EMPLOYEE LOGIN
+    // =====================================
     const user = await User.findOne({
-      email: email.toLowerCase().trim(),
+      email: normalizedEmail,
     });
 
     if (!user) {
@@ -91,7 +156,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Compare password
+    // Compare employee password
     const isPasswordValid = await bcrypt.compare(
       password,
       user.password
@@ -103,7 +168,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Create JWT
+    // Create employee token
     const token = jwt.sign(
       {
         userId: user._id,
@@ -115,7 +180,7 @@ router.post("/login", async (req, res) => {
       }
     );
 
-    res.json({
+    return res.json({
       message: "Login successful",
       token,
       user: {
@@ -128,7 +193,7 @@ router.post("/login", async (req, res) => {
   } catch (error) {
     console.error("Login error:", error);
 
-    res.status(500).json({
+    return res.status(500).json({
       message: "Server error during login",
     });
   }

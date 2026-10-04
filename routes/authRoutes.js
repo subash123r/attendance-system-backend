@@ -19,6 +19,7 @@ router.post("/signup", async (req, res) => {
       });
     }
 
+    // Password validation
     if (password.length < 6) {
       return res.status(400).json({
         message: "Password must be at least 6 characters",
@@ -41,8 +42,8 @@ router.post("/signup", async (req, res) => {
 
     // Create employee
     const user = await User.create({
-      name,
-      email: email.toLowerCase(),
+      name: name.trim(),
+      email: email.toLowerCase().trim(),
       password: hashedPassword,
       role: "employee",
     });
@@ -68,19 +69,29 @@ router.post("/signup", async (req, res) => {
 // =========================
 // LOGIN
 // =========================
-router.post("/signup", async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
-    console.log("SIGNUP BODY:", req.body);
+    const { email, password } = req.body;
 
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
+    // Validation
+    if (!email || !password) {
       return res.status(400).json({
-        message: "Name, email and password are required",
+        message: "Email and password are required",
       });
     }
 
-    // remaining code...
+    // Find user
+    const user = await User.findOne({
+      email: email.toLowerCase().trim(),
+    });
+
+    if (!user) {
+      return res.status(401).json({
+        message: "Invalid email or password",
+      });
+    }
+
+    // Compare password
     const isPasswordValid = await bcrypt.compare(
       password,
       user.password
@@ -92,6 +103,7 @@ router.post("/signup", async (req, res) => {
       });
     }
 
+    // Create JWT
     const token = jwt.sign(
       {
         userId: user._id,
